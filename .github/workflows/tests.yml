@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/dev' && 'dev' || github.ref == 'refs/heads/sb' && 'sb' || 'prod' }}
+    environment: ${{ github.ref == 'refs/heads/dev' && 'dev' || github.ref == 'refs/heads/sb' && 'sb' || 'Prod' }}
 
     steps:
       - name: Checkout
