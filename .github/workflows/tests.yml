@@ -11,25 +11,14 @@ jobs:
   tests:
     runs-on: ubuntu-latest
 
-    # ✅ Picks env correctly for BOTH push and PR:
-    # - PR: uses github.head_ref (source branch)
-    # - Push: uses github.ref_name (branch name)
-    environment: ${{ 
-      (github.head_ref || github.ref_name) == 'dev' 
-        ? 'dev' 
-        : (github.head_ref || github.ref_name) == 'sb' 
-          ? 'sb' 
-          : 'Prod' 
-    }}
+    # PR-da source branch -> github.head_ref, push-da -> github.ref_name
+    environment: ${{ (github.head_ref != '' && github.head_ref == 'dev') && 'dev' || (github.head_ref != '' && github.head_ref == 'sb') && 'sb' || (github.head_ref == '' && github.ref_name == 'dev') && 'dev' || (github.head_ref == '' && github.ref_name == 'sb') && 'sb' || 'Prod' }}
 
-    # ✅ Map Environment secrets into process.env for Node/Playwright
     env:
       BASE_URL: ${{ secrets.BASE_URL }}
       ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
       ADMIN_OTP: ${{ secrets.ADMIN_OTP }}
-
-      # optional: useful for debugging
       NODE_ENV: test
       CI: true
 
@@ -49,21 +38,12 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      # ✅ Show which branch/env is selected (no secrets)
-      - name: Debug branch + selected env
+      - name: Debug branch
         run: |
           echo "GITHUB_REF=$GITHUB_REF"
           echo "GITHUB_REF_NAME=$GITHUB_REF_NAME"
           echo "GITHUB_HEAD_REF=$GITHUB_HEAD_REF"
-          echo "Selected environment=${{ 
-            (github.head_ref || github.ref_name) == 'dev' 
-              ? 'dev' 
-              : (github.head_ref || github.ref_name) == 'sb' 
-                ? 'sb' 
-                : 'Prod' 
-          }}"
 
-      # ✅ Safe check: values exist? (does NOT print actual password)
       - name: Debug env presence (safe)
         run: |
           node -e "console.log({
@@ -79,7 +59,6 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test
 
-      # ✅ Always upload report even if tests fail
       - name: Upload Playwright Report
         if: always()
         uses: actions/upload-artifact@v4
