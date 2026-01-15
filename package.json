@@ -1,0 +1,26 @@
+{
+  "name": "payriff-playwright",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "auth:admin": "playwright test tests/.auth/admin.setup.spec.js",
+    "test:smoke": "playwright test tests/smoke",
+    "test:all": "playwright test",
+    "report": "playwright show-report artifacts/playwright-report",
+    "allure:gen": "allure generate ./allure-results -o ./allure-report --clean",
+    "allure:open": "allure open ./allure-report",
+    "allure:serve": "allure serve ./allure-results"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3"
+  }
+}

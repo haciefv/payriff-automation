@@ -1,0 +1,67 @@
+image: mcr.microsoft.com/playwright:v1.57.0-jammy
+
+stages:
+  - setup
+  - test
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+   - .npm/
+
+variables:
+  CI: "true"
+  HEADLESS: "true"
+  TRACE: "on-first-retry"
+  VIDEO: "retain-on-failure"
+  SCREENSHOT: "only-on-failure"
+  WORKERS: "4"
+  RETRIES: "1"
+
+before_script:
+  - node -v
+  - npm -v
+  - npm ci --cache .npm --prefer-offline
+
+
+auth_admin:
+  stage: setup
+  script:
+    - mkdir -p artifacts
+    - npm run auth:admin
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - artifacts/admin.storageState.json
+
+smoke:
+  stage: test
+  needs: ["auth_admin"]
+  script:
+    - npm run test:smoke
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - artifacts/playwright-report
+      - test-results
+      - artifacts/admin.storageState.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+
+regression:
+  stage: test
+  needs: ["auth_admin"]
+  script:
+    - npx playwright test tests/regression
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - artifacts/playwright-report
+      - test-results
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - when: manual
