@@ -2,13 +2,36 @@ name: Playwright Tests
 
 on:
   push:
-    branches-ignore: []
+    branches: [ "dev", "sb", "main", "master" ]
   pull_request:
+    branches: [ "dev", "sb", "main", "master" ]
+  workflow_dispatch:
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/dev' && 'dev' || github.ref == 'refs/heads/sb' && 'sb' || 'Prod' }}
+
+    # ✅ Picks env correctly for BOTH push and PR:
+    # - PR: uses github.head_ref (source branch)
+    # - Push: uses github.ref_name (branch name)
+    environment: ${{ 
+      (github.head_ref || github.ref_name) == 'dev' 
+        ? 'dev' 
+        : (github.head_ref || github.ref_name) == 'sb' 
+          ? 'sb' 
+          : 'Prod' 
+    }}
+
+    # ✅ Map Environment secrets into process.env for Node/Playwright
+    env:
+      BASE_URL: ${{ secrets.BASE_URL }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      ADMIN_OTP: ${{ secrets.ADMIN_OTP }}
+
+      # optional: useful for debugging
+      NODE_ENV: test
+      CI: true
 
     steps:
       - name: Checkout
@@ -26,23 +49,41 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      - name: Run tests
-        env:
-          BASE_URL: ${{ secrets.BASE_URL }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          ADMIN_OTP: ${{ secrets.ADMIN_OTP }}
-          HEADLESS: "true"
-          WORKERS: "4"
-          RETRIES: "1"
-          TRACE: "on-first-retry"
-          VIDEO: "retain-on-failure"
-          SCREENSHOT: "only-on-failure"
+      # ✅ Show which branch/env is selected (no secrets)
+      - name: Debug branch + selected env
+        run: |
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_REF_NAME=$GITHUB_REF_NAME"
+          echo "GITHUB_HEAD_REF=$GITHUB_HEAD_REF"
+          echo "Selected environment=${{ 
+            (github.head_ref || github.ref_name) == 'dev' 
+              ? 'dev' 
+              : (github.head_ref || github.ref_name) == 'sb' 
+                ? 'sb' 
+                : 'Prod' 
+          }}"
+
+      # ✅ Safe check: values exist? (does NOT print actual password)
+      - name: Debug env presence (safe)
+        run: |
+          node -e "console.log({
+            baseUrl: process.env.BASE_URL,
+            hasEmail: !!process.env.ADMIN_EMAIL,
+            emailLen: (process.env.ADMIN_EMAIL||'').length,
+            hasPass: !!process.env.ADMIN_PASSWORD,
+            passLen: (process.env.ADMIN_PASSWORD||'').length,
+            hasOtp: !!process.env.ADMIN_OTP,
+            otpLen: (process.env.ADMIN_OTP||'').length
+          })"
+
+      - name: Run Playwright tests
         run: npx playwright test
 
-      - name: Upload report
+      # ✅ Always upload report even if tests fail
+      - name: Upload Playwright Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: artifacts/playwright-report
+          path: playwright-report
+          retention-days: 14
