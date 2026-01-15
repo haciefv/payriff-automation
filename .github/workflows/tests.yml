@@ -2,17 +2,13 @@ name: Playwright Tests
 
 on:
   push:
-    branches: ["**"]
+    branches-ignore: []
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    environment: ${{ 
-      github.ref == 'refs/heads/dev' && 'dev' || 
-      github.ref == 'refs/heads/sb' && 'sb' || 
-      'prod' 
-    }}
+    environment: ${{ github.ref == 'refs/heads/dev' && 'dev' || github.ref == 'refs/heads/sb' && 'sb' || 'prod' }}
 
     steps:
       - name: Checkout
