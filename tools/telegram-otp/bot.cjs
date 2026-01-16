@@ -13,7 +13,7 @@ if (!BOT_TOKEN) {
 }
 
 function isAllowed(userId) {
-  if (ALLOWED_USER_IDS.length === 0) return true; // istəyirsən buranı sərtləşdirərik
+  if (ALLOWED_USER_IDS.length === 0) return false; // istəyirsən buranı sərtləşdirərik
   return ALLOWED_USER_IDS.includes(String(userId));
 }
 
@@ -37,6 +37,10 @@ bot.onText(/^\/start/, (msg) => {
     msg.chat.id,
     `OK. OTP bot aktivdir.\nGöndər: otp <sessionId> <otp>\nMəs: otp demo-1 123456`
   );
+});
+
+bot.onText(/^\/id$/, (msg) => {
+  bot.sendMessage(msg.chat.id, `chatId: ${msg.chat.id}\nuserId: ${msg.from?.id}`);
 });
 
 bot.on("message", async (msg) => {
