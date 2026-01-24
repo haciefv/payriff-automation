@@ -1,46 +1,47 @@
-﻿const sessions = new Map();
+﻿// tools/telegram-otp/store.cjs
+// In-memory store: userId -> { lastOtp, history[] }
+// Note: Server restart olanda state sıfırlanır (bu normaldır).
 
-/**
- * session = {
- *   createdAt: number,
- *   otp: string | null
- * }
- */
+const state = new Map();
 
-function startSession(sessionId) {
-  if (!sessionId) throw new Error("sessionId is required");
-
-  const existing = sessions.get(sessionId);
-  if (existing) return existing;
-
-  const data = { createdAt: Date.now(), otp: null };
-  sessions.set(sessionId, data);
-  return data;
+function ensure(userId) {
+  const id = String(userId);
+  if (!state.has(id)) state.set(id, { lastOtp: null, history: [] });
+  return state.get(id);
 }
 
-function setOtp(sessionId, otp) {
-  if (!sessionId) throw new Error("sessionId is required");
-  if (!otp) throw new Error("otp is required");
+function pushOtp(userId, code, meta = {}) {
+  const s = ensure(userId);
+  const item = { code: String(code), at: Date.now(), ...meta };
 
-  const s = sessions.get(sessionId) ?? startSession(sessionId);
-  s.otp = String(otp).trim();
-  sessions.set(sessionId, s);
-  return s;
+  s.lastOtp = item;
+  s.history.unshift(item);
+
+  // history limit
+  if (s.history.length > 50) s.history = s.history.slice(0, 50);
+
+  return item;
 }
 
-function getOtp(sessionId) {
-  if (!sessionId) throw new Error("sessionId is required");
-  const s = sessions.get(sessionId);
-  return s?.otp ?? null;
+function getLastOtp(userId) {
+  const s = ensure(userId);
+  return s.lastOtp; // null ola bilər
 }
 
-function hasSession(sessionId) {
-  return sessions.has(sessionId);
+function getHistory(userId) {
+  const s = ensure(userId);
+  return s.history;
+}
+
+function clearUser(userId) {
+  const id = String(userId);
+  state.set(id, { lastOtp: null, history: [] });
+  return true;
 }
 
 module.exports = {
-  startSession,
-  setOtp,
-  getOtp,
-  hasSession
+  pushOtp,
+  getLastOtp,
+  getHistory,
+  clearUser,
 };

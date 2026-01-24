@@ -1,81 +1,55 @@
-﻿const http = require("http");
-const { URL } = require("url");
-const { startSession, setOtp, getOtp, hasSession } = require("./store.cjs");
+﻿// tools/telegram-otp/server.cjs
+require("dotenv").config();
 
-const PORT = process.env.OTP_SERVER_PORT ? Number(process.env.OTP_SERVER_PORT) : 5055;
+const express = require("express");
+const cors = require("cors");
 
-function sendJson(res, statusCode, payload) {
-  const body = JSON.stringify(payload);
-  res.writeHead(statusCode, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body)
-  });
-  res.end(body);
-}
+const { pushOtp, getLastOtp, getHistory, clearUser } = require("./store.cjs");
 
-function collectJson(req) {
-  return new Promise((resolve, reject) => {
-    let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => {
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch (e) {
-        reject(new Error("Invalid JSON body"));
-      }
-    });
-  });
-}
+const PORT = Number(process.env.OTP_SERVER_PORT || 5055);
 
-const server = http.createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const path = url.pathname;
-    const method = req.method?.toUpperCase();
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-    // Health
-    if (method === "GET" && path === "/health") {
-      return sendJson(res, 200, { ok: true, service: "telegram-otp-server", port: PORT });
-    }
+// health
+app.get("/health", (req, res) => res.json({ ok: true }));
 
-    // POST /start-session { sessionId }
-    if (method === "POST" && path === "/start-session") {
-      const body = await collectJson(req);
-      const sessionId = body.sessionId;
-      const session = startSession(sessionId);
-      return sendJson(res, 200, { ok: true, sessionId, createdAt: session.createdAt });
-    }
-
-    // POST /set-otp { sessionId, otp }
-    if (method === "POST" && path === "/set-otp") {
-      const body = await collectJson(req);
-      const sessionId = body.sessionId;
-      const otp = body.otp;
-      const session = setOtp(sessionId, otp);
-      return sendJson(res, 200, { ok: true, sessionId, hasOtp: !!session.otp });
-    }
-
-    // GET /get-otp?sessionId=...
-    if (method === "GET" && path === "/get-otp") {
-      const sessionId = url.searchParams.get("sessionId");
-      if (!sessionId) return sendJson(res, 400, { ok: false, error: "sessionId is required" });
-
-      if (!hasSession(sessionId)) {
-        return sendJson(res, 404, { ok: false, error: "session not found" });
-      }
-
-      const otp = getOtp(sessionId);
-      return sendJson(res, 200, { ok: true, sessionId, otp });
-    }
-
-    return sendJson(res, 404, { ok: false, error: "not found" });
-  } catch (e) {
-    return sendJson(res, 500, { ok: false, error: e.message ?? "server error" });
+// OTP push (bot buraya yazır)
+app.post("/otp", (req, res) => {
+  const { userId, code, source } = req.body || {};
+  if (!userId || !code) {
+    return res
+      .status(400)
+      .json({ ok: false, error: "userId and code are required" });
   }
+
+  const item = pushOtp(String(userId), String(code), {
+    source: source || "unknown",
+  });
+  return res.json({ ok: true, item });
 });
 
-server.listen(PORT, () => {
-  console.log(`[telegram-otp] server started on http://localhost:${PORT}`);
-  console.log(`[telegram-otp] endpoints: GET /health, POST /start-session, POST /set-otp, GET /get-otp?sessionId=...`);
+// OTP read (Playwright burdan oxuyur)
+app.get("/otp/:userId", (req, res) => {
+  const userId = String(req.params.userId);
+  const otp = getLastOtp(userId);
+  res.json({ otp });
+});
+
+// history (debug)
+app.get("/history/:userId", (req, res) => {
+  const userId = String(req.params.userId);
+  res.json({ history: getHistory(userId) });
+});
+
+// clear
+app.delete("/clear/:userId", (req, res) => {
+  const userId = String(req.params.userId);
+  clearUser(userId);
+  res.json({ ok: true });
+});
+
+app.listen(PORT, () => {
+  console.log(`[telegram-otp] OTP server started: http://127.0.0.1:${PORT}`);
 });

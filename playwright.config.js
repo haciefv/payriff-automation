@@ -13,9 +13,10 @@ export default defineConfig({
   fullyParallel: true,
 
   // ✅ Report həmişə eyni yerdə olsun ki CI upload tapsın
-  reporter: [
+ reporter: [
     ['list'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    ['allure-playwright', { outputFolder: 'allure-results' }],
   ],
 
   use: {

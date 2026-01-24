@@ -1,126 +1,148 @@
-📦 Tech Stack
+# Payriff Playwright Automation
 
-Playwright
+End-to-end UI automation framework built with **Playwright** for Payriff CRM / Admin panel.  
+Supports **local run** and **GitHub Actions CI** with environment-based configuration.
 
-Node.js (ESM)
+---
 
-JavaScript
+## 🚀 Tech Stack
+- Playwright
+- Node.js 18+ / 20
+- JavaScript (ESM)
+- GitHub Actions
+- HTML Report (Playwright)
 
-dotenv
+---
 
-GitHub / GitHub Actions (CI ready)
+## 📂 Project Structure
+```
+.
+├── src/
+│   ├── pages/              # Page Objects
+│   └── config/
+│       └── env.js          # Environment config (CI + local)
+├── tests/
+│   ├── smoke/              # Smoke tests
+│   └── global.setup.js     # Auth / storageState setup
+├── artifacts/
+│   └── admin.storageState.json
+├── playwright.config.js
+├── package.json
+└── README.md
+```
 
-✅ Requirements
+---
 
-Node.js 18+ (recommended: Node 20)
+## 🔐 Environment Variables
 
-Git
+### Required variables
+These are mandatory (local `.env` or GitHub Actions):
 
-Internet access (for Playwright browsers)
+| Variable | Description |
+|--------|------------|
+| BASE_URL | Application base URL |
+| ADMIN_EMAIL | Admin login email |
+| ADMIN_PASSWORD | Admin password |
+| ADMIN_OTP | OTP / 2FA code |
 
-Check versions:
+---
 
-node -v
+## ▶️ Local Run
 
-npm -v
+### Install dependencies
+```bash
+npm install
+```
 
-🚀 First Time Setup
-Install dependencies
+### Create `.env` file
+```env
+BASE_URL=https://example.com
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=*******
+ADMIN_OTP=******
+```
 
-npm ci
-
-Install Playwright browsers
-
-npx playwright install
-
-🔐 Environment Configuration
-Create .env
-
-Copy example file:
-
-.env.example → .env
-(Windows: copy manually)
-
-Fill required variables in .env
-
-BASE_URL=https://dashboard.payriff.com
-
-ADMIN_EMAIL=your_email
-ADMIN_PASSWORD=your_password
-ADMIN_OTP=your_otp_if_required
-
-IMPORTANT: .env is ignored by git and must NOT be committed.
-
-▶️ Running Tests
-
-Run all tests:
-
+### Run tests
+```bash
 npx playwright test
+```
 
-Run smoke tests only:
+### Open report
+```bash
+npx playwright show-report
+```
 
-npm run test:smoke
+---
 
-🔑 Authentication & storageState
-
-Auth state file:
-
+## 🔑 Authentication Flow
+- Login is executed once in `global.setup.js`
+- Auth state is saved to:
+```
 artifacts/admin.storageState.json
+```
+- All tests reuse this state
 
-Framework uses Playwright globalSetup.
+---
 
-If the file does NOT exist:
+## 📊 Reports & Artifacts
+- HTML report: `playwright-report/`
+- Screenshots / videos / traces on failure
+- CI uploads reports as GitHub Artifacts
 
-Login is executed automatically
+---
 
-storageState is generated
+## 🤖 GitHub Actions CI
 
-If the file exists:
+### Environments
+Supported environments:
+- dev
+- sb
+- Prod
 
-Login is skipped
+Secrets location:
+```
+Settings → Environments → <env> → Secrets / Variables
+```
 
-Tests start immediately
+### Environment auto-selection
+- dev branch → dev
+- sb branch → sb
+- others → Prod
 
-Works both locally and in CI.
+---
 
-📊 Reports
+## 🧪 Debugging in CI
+Masked logs example:
+```
+[CI-ENV] ADMIN_EMAIL = pay***l.com
+[CI-ENV] ADMIN_PASSWORD = ******
+[CI-ENV] BASE_URL = https://***riff.com
+```
 
-Open HTML report:
+---
 
-npm run report
+## 📩 Optional: Email Reports
+Framework supports emailing Playwright report ZIP via Gmail SMTP (App Password).
 
-Report location:
+---
 
-artifacts/playwright-report/
+## ❗ Common Issues
 
-👥 Team Workflow
+### BASE_URL is required
+- Check Variables vs Secrets
+- Use vars.BASE_URL || secrets.BASE_URL in CI
 
-Branch naming:
+### Element not found in CI
+- Possible auth redirect or route change
+- Inspect trace.zip:
+```bash
+npx playwright show-trace trace.zip
+```
 
-feature/<name>-<description>
+---
 
-Flow:
+---
 
-Create branch
-
-Open Pull Request
-
-Review
-
-Merge to main
-
-⚠️ Important Notes
-
-Do NOT commit:
-
-.env
-
-node_modules
-
-artifacts
-
-test-results
-
-Always keep Playwright version in CI in sync with package.json.
-
-Happy Testing 🚀
+✅ CI-ready  
+✅ Environment-aware  
+✅ Secure secrets handling  
