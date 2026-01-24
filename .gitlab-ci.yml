@@ -15,7 +15,7 @@ variables:
   TRACE: "on-first-retry"
   VIDEO: "retain-on-failure"
   SCREENSHOT: "only-on-failure"
-  WORKERS: "4"
+  WORKERS: "1"
   RETRIES: "1"
 
 before_script:
