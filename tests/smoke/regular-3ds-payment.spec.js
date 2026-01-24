@@ -65,6 +65,8 @@ test("smoke: Regular 3DS payment", async ({ page }) => {
   const payment = new PaymentPage(payPage);
   await payment.pay(env.card);
 
+  
+
   // --- Wait for 3DS ACS page ---
   await payPage.waitForURL(/3dsecure\.az\/way4acs\/.*challenge/i, { timeout: 60_000 });
 
