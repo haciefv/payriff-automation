@@ -24,7 +24,8 @@ export const env = {
     holder: req('CARD_HOLDER'),
     number: req('CARD_NUMBER'), // boşluqsuz saxlanır
     exp: req('CARD_EXP'),
-    cvv: req('CARD_CVV'),
+    // cvv: req('CARD_CVV'),
+    cvv: '077',
   },
 
   // ---- OTP / Telegram ----
