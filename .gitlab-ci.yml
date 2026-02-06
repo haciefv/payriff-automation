@@ -16,7 +16,8 @@ e2e:smoke:
     - npx playwright install --with-deps
 
     # 2️⃣ OTP server availability check (BURDA elave olunur)
-    - echo "Checking OTP server health..."
+
+    - echo "OTP_SERVER_URL=$OTP_SERVER_URL"
     - curl -fsS "$OTP_SERVER_URL/health"
 
   script:
