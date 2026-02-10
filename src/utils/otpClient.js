@@ -1,66 +1,63 @@
 ﻿// src/utils/otpClient.js
 
-function normalizeBaseUrl(baseUrl) {
-  const v = baseUrl || process.env.OTP_SERVER_URL || "http://127.0.0.1:5055";
-  return v.replace(/\/+$/, ""); // sondakı "/" sil
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-export async function clearOtp(
-  request,
-  userId,
-  { baseUrl, timeoutMs = 3000, failSilently = true } = {}
-) {
-  const b = normalizeBaseUrl(baseUrl);
-  const url = `${b}/clear/${encodeURIComponent(userId)}`;
+function baseUrl() {
+  const url = process.env.OTP_SERVER_URL;
+  if (!url) throw new Error("OTP_SERVER_URL is missing in env");
+  return url.replace(/\/+$/, "");
+}
 
-  try {
-    const res = await request.delete(url, { timeout: timeoutMs });
+export async function clearOtp(request, userId) {
+  if (!userId) throw new Error("clearOtp: userId is required");
 
-    // cleanup => default warn
-    if (!res.ok()) {
-      const body = await res.text().catch(() => "");
-      const msg = `OTP clear failed: ${res.status()} ${body} (url=${url})`;
-      if (!failSilently) throw new Error(msg);
-      console.warn(msg);
-    }
-  } catch (e) {
-    const msg = `OTP clear skipped: ${String(e)} (url=${url})`;
-    if (!failSilently) throw new Error(msg);
-    console.warn(msg);
+  // clear endpoint varsa:
+  const res = await request.delete(
+    `${baseUrl()}/clear/${encodeURIComponent(String(userId))}`,
+    { timeout: 10_000 }
+  );
+
+  // serverdə delete route varsa 200 verəcək; yoxdursa testin qırılmasın:
+  if (!res.ok()) {
+    // fallback: ignore (optional)
+    // console.warn("clearOtp failed:", res.status());
   }
 }
 
-export async function waitForOtp(
-  request,
-  userId,
-  { baseUrl, timeoutMs = 120_000, intervalMs = 2000, perRequestTimeoutMs = 8000 } = {}
-) {
-  const b = normalizeBaseUrl(baseUrl);
-  const deadline = Date.now() + timeoutMs;
-  let lastErr;
+export async function waitForOtp(request, userId, opts = {}) {
+  if (!userId) throw new Error("waitForOtp: userId is required");
 
-  while (Date.now() < deadline) {
-    try {
-      const res = await request.get(`${b}/otp/${encodeURIComponent(userId)}`, {
-        timeout: perRequestTimeoutMs,
-      });
+  const timeoutMs = opts.timeoutMs ?? 120_000;
+  const intervalMs = opts.intervalMs ?? 2000;
+  const minAt = opts.minAt ?? Date.now();
 
-      if (res.ok()) {
-        const data = await res.json().catch(() => ({}));
-        const code = data?.otp?.code;
-        if (code) return String(code).trim();
-      } else {
-        // qeyri-200 cavablar üçün də info saxla
-        lastErr = new Error(`OTP server responded ${res.status()}`);
+  const start = Date.now();
+  let last = null;
+
+  while (Date.now() - start < timeoutMs) {
+    const res = await request.get(
+      `${baseUrl()}/otp/${encodeURIComponent(String(userId))}`,
+      { timeout: 10_000 }
+    );
+
+    if (res.ok()) {
+      const data = await res.json().catch(() => ({}));
+      const otp = data?.otp ?? null;
+      if (otp?.code) last = otp;
+
+      // fresh OTP qaytarsın
+      if (otp?.code && typeof otp.at === "number" && otp.at >= minAt) {
+        return otp.code;
       }
-    } catch (e) {
-      lastErr = e;
     }
 
-    await new Promise((r) => setTimeout(r, intervalMs));
+    const jitter = Math.floor(Math.random() * 250);
+    await sleep(intervalMs + jitter);
   }
 
   throw new Error(
-    `OTP not received within ${timeoutMs}ms. baseUrl=${b}. Last error: ${lastErr ? String(lastErr) : "none"}`
+    `OTP timeout after ${timeoutMs}ms. Last seen: ${last ? JSON.stringify(last) : "none"}`
   );
 }
