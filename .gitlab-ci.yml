@@ -19,6 +19,7 @@ e2e:smoke:
 
     - echo "OTP_SERVER_URL=$OTP_SERVER_URL"
     - curl -fsS "$OTP_SERVER_URL/health"
+    
 
   script:
     # 3️⃣ Auth / storageState setup (ƏVVƏLCƏ İŞLƏYİR)
