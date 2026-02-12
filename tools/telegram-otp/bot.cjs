@@ -6,6 +6,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OTP_SERVER = process.env.OTP_SERVER_URL || "http://127.0.0.1:5055";
 
+// Allowlist: "123,456,789"
 const ALLOWED_USER_IDS = (process.env.TELEGRAM_ALLOWED_USER_IDS || "")
   .split(",")
   .map((x) => x.trim())
@@ -17,7 +18,6 @@ if (!BOT_TOKEN) {
 }
 
 function isAllowed(userId) {
-  if (ALLOWED_USER_IDS.length === 0) return false;
   return ALLOWED_USER_IDS.includes(String(userId));
 }
 
@@ -57,6 +57,12 @@ bot.on("message", async (msg) => {
   const userId = String(msg.from?.id || "");
   const text = (msg.text || "").trim();
 
+  // ✅ /myid hamı üçün açıqdır (ID-ni tapmaq üçün)
+  if (text === "/myid") {
+    return bot.sendMessage(chatId, `Sənin Telegram User ID: ${userId}`);
+  }
+
+  // ✅ Allowlist check (qalan hər şey üçün)
   if (!isAllowed(userId)) {
     return bot.sendMessage(chatId, "⛔ Access denied.");
   }
@@ -75,6 +81,7 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(
       chatId,
       "Komandalar:\n" +
+        "/myid — sənin user id\n" +
         "/clear — OTP & history sil\n" +
         "OTP kodunu (məs: 123456) göndər → save olacaq"
     );
