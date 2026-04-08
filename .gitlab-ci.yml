@@ -28,7 +28,7 @@ e2e:smoke:
 
     # 4️⃣ Smoke test (OTP + 3DS)
     - echo "Running smoke test..."
-    - npx playwright test tests/smoke/regular-3ds-payment.spec.js --workers=1
+    - npx playwright test  --workers=1
 
   artifacts:
     when: always
