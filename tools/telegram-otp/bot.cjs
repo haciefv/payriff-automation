@@ -1,39 +1,101 @@
-﻿// tools/telegram-otp/bot.cjs
-// require("dotenv").config(); 
+// tools/telegram-otp/bot.cjs
+require("dotenv").config();
 
 const TelegramBot = require("node-telegram-bot-api");
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const OTP_SERVER = process.env.OTP_SERVER_URL || "http://127.0.0.1:5055";
-
-// Allowlist: "123,456,789"
-const ALLOWED_USER_IDS = (process.env.TELEGRAM_ALLOWED_USER_IDS || "")
-  .split(",")
-  .map((x) => x.trim())
-  .filter(Boolean);
+const OTP_SERVER = String(
+  process.env.OTP_SERVER_URL ||
+    `http://127.0.0.1:${process.env.OTP_SERVER_PORT || 5055}`
+).replace(/\/+$/, "");
+const ALLOWED_USER_IDS = parseCsv(process.env.TELEGRAM_ALLOWED_USER_IDS || "");
+const OTP_CHANNEL_IDS = new Set(parseCsv(process.env.TELEGRAM_OTP_CHANNEL_IDS || ""));
+const CHANNEL_TARGET_USER_ID = String(
+  process.env.TELEGRAM_CHANNEL_TARGET_USER_ID || process.env.TELEGRAM_USER_ID || ""
+).trim();
+const OTP_REGEX = /\b(\d{4,8})\b/;
 
 if (!BOT_TOKEN) {
   console.error("[telegram-otp] TELEGRAM_BOT_TOKEN is required");
   process.exit(1);
 }
 
+function parseCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function isAllowed(userId) {
   return ALLOWED_USER_IDS.includes(String(userId));
 }
 
+function isAllowedChannel(channelId) {
+  return OTP_CHANNEL_IDS.has(String(channelId));
+}
+
+function getMessageText(msg) {
+  return [msg?.text, msg?.caption].filter(Boolean).join("\n").trim();
+}
+
+function extractOtp(text) {
+  const match = String(text || "").match(OTP_REGEX);
+  return match ? match[1] : null;
+}
+
+function summarizeResponse(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const summary = { ...payload };
+  if (summary.item && typeof summary.item === "object") {
+    summary.item = {
+      ...summary.item,
+      code: summary.item.code ? "[redacted]" : summary.item.code,
+    };
+  }
+
+  return summary;
+}
+
 async function fetchJson(url, options = {}) {
-  console.log("[HTTP →]", options.method || "GET", url);
+  const method = options.method || "GET";
+  console.log("[telegram-otp] HTTP ->", method, url);
 
   const res = await fetch(url, options);
   const text = await res.text();
 
-  console.log("[HTTP ←]", res.status, text);
-
+  let payload;
   try {
-    return JSON.parse(text);
+    payload = JSON.parse(text);
   } catch {
-    return text;
+    payload = text;
   }
+
+  console.log("[telegram-otp] HTTP <-", res.status, summarizeResponse(payload));
+
+  if (!res.ok) {
+    const error = new Error(`HTTP ${res.status}`);
+    error.status = res.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+async function postOtp({ userId, code, source, deviceId, note }) {
+  return fetchJson(`${OTP_SERVER}/otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: String(userId),
+      code: String(code),
+      source,
+      deviceId,
+      note,
+    }),
+  });
 }
 
 async function clearRemote(userId) {
@@ -42,7 +104,8 @@ async function clearRemote(userId) {
       method: "DELETE",
     });
     return true;
-  } catch {
+  } catch (error) {
+    console.warn("[telegram-otp] Clear failed:", error.message);
     return false;
   }
 }
@@ -50,71 +113,124 @@ async function clearRemote(userId) {
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 bot.on("message", async (msg) => {
-  console.log("\n[TELEGRAM IN]");
-  console.dir(msg, { depth: null });
+  if (msg?.chat?.type === "channel") return;
 
   const chatId = msg.chat.id;
   const userId = String(msg.from?.id || "");
-  const text = (msg.text || "").trim();
+  const text = getMessageText(msg);
 
-  // ✅ /myid hamı üçün açıqdır (ID-ni tapmaq üçün)
+  console.log("[telegram-otp] Message received", {
+    chatId,
+    userId,
+    chatType: msg.chat?.type || "unknown",
+  });
+
   if (text === "/myid") {
-    return bot.sendMessage(chatId, `Sənin Telegram User ID: ${userId}`);
+    return bot.sendMessage(chatId, `Your Telegram User ID: ${userId}`);
   }
 
-  // ✅ Allowlist check (qalan hər şey üçün)
   if (!isAllowed(userId)) {
-    return bot.sendMessage(chatId, "⛔ Access denied.");
+    return bot.sendMessage(chatId, "Access denied.");
   }
 
-  // /clear
   if (text === "/clear") {
     const ok = await clearRemote(userId);
     return bot.sendMessage(
       chatId,
-      ok ? "✅ Cleared (history + lastOtp)." : "❌ Clear failed (OTP server?)"
+      ok ? "Cleared OTP history." : "Clear failed. Is the OTP server running?"
     );
   }
 
-  // /help
   if (text === "/help" || text === "/start") {
     return bot.sendMessage(
       chatId,
-      "Komandalar:\n" +
-        "/myid — sənin user id\n" +
-        "/clear — OTP & history sil\n" +
-        "OTP kodunu (məs: 123456) göndər → save olacaq"
+      "Commands:\n" +
+        "/myid - show your Telegram user id\n" +
+        "/clear - clear OTP history\n" +
+        "Send an OTP like 123456 to store it"
     );
   }
 
-  // OTP save (4–8 rəqəm)
-  const otpMatch = text.match(/\b(\d{4,8})\b/);
-  if (otpMatch) {
-    const code = otpMatch[1];
-
-    try {
-      await fetchJson(`${OTP_SERVER}/otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          code,
-          source: "telegram",
-        }),
-      });
-
-      return bot.sendMessage(chatId, `✅ OTP saved: ${code}`);
-    } catch (e) {
-      return bot.sendMessage(chatId, `❌ OTP save failed: ${e.message}`);
-    }
+  const code = extractOtp(text);
+  if (!code) {
+    return bot.sendMessage(chatId, "Send an OTP like 123456 or use /clear.");
   }
 
-  return bot.sendMessage(chatId, "OTP kodunu göndər (məs: 123456) və ya /clear");
+  try {
+    await postOtp({
+      userId,
+      code,
+      source: "telegram",
+      deviceId: `telegram-chat:${chatId}`,
+    });
+
+    return bot.sendMessage(chatId, `OTP saved: ${code}`);
+  } catch (error) {
+    return bot.sendMessage(chatId, `OTP save failed: ${error.message}`);
+  }
 });
+
+async function handleChannelPost(msg) {
+  const channelId = String(msg?.chat?.id || "");
+  const channelName = msg?.chat?.title || msg?.chat?.username || channelId;
+  const text = getMessageText(msg);
+  const code = extractOtp(text);
+
+  console.log("[telegram-otp] Channel post received", {
+    channelId,
+    channelName,
+  });
+
+  if (!code) return;
+
+  if (!isAllowedChannel(channelId)) {
+    console.log("[telegram-otp] Ignoring OTP from unconfigured channel", {
+      channelId,
+      channelName,
+    });
+    return;
+  }
+
+  if (!CHANNEL_TARGET_USER_ID) {
+    console.warn(
+      "[telegram-otp] TELEGRAM_CHANNEL_TARGET_USER_ID or TELEGRAM_USER_ID is required for channel OTP forwarding"
+    );
+    return;
+  }
+
+  try {
+    await postOtp({
+      userId: CHANNEL_TARGET_USER_ID,
+      code,
+      source: "telegram-channel",
+      deviceId: `telegram-channel:${channelId}`,
+      note: channelName,
+    });
+
+    console.log("[telegram-otp] Channel OTP forwarded", {
+      channelId,
+      channelName,
+      targetUserId: CHANNEL_TARGET_USER_ID,
+    });
+  } catch (error) {
+    console.error("[telegram-otp] Channel OTP forward failed:", error.message);
+  }
+}
+
+bot.on("channel_post", handleChannelPost);
+bot.on("edited_channel_post", handleChannelPost);
 
 console.log("[telegram-otp] Bot started");
 console.log("[telegram-otp] OTP server:", OTP_SERVER);
 console.log(
-  "[telegram-otp] Allowed IDs:",
+  "[telegram-otp] Allowed user IDs:",
   ALLOWED_USER_IDS.length ? ALLOWED_USER_IDS.join(",") : "(none)"
+);
+console.log(
+  "[telegram-otp] Allowed channel IDs:",
+  OTP_CHANNEL_IDS.size ? Array.from(OTP_CHANNEL_IDS).join(",") : "(none)"
+);
+console.log(
+  "[telegram-otp] Channel target user:",
+  CHANNEL_TARGET_USER_ID || "(not set)"
 );

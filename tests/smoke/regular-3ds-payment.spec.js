@@ -70,6 +70,7 @@ test("smoke: Regular 3DS payment", async ({ page }) => {
 
   // OTP state: əvvəl təmizlə
   await clearOtp(payPage.request, userId, { baseUrl: otpServerUrl, failSilently: true });
+  const minAt = Date.now();
 
   try {
     // Telegram notify test-i öldürməsin (external)
@@ -88,6 +89,7 @@ test("smoke: Regular 3DS payment", async ({ page }) => {
       baseUrl: otpServerUrl,
       timeoutMs: 120_000,
       intervalMs: 2000,
+      minAt,
     });
 
     await otpInput.fill(String(otpCode));
